@@ -9,7 +9,7 @@ pub trait NodeHandler {
     fn init(&mut self, node_id: NodeId, node_ids:Vec<NodeId>);
 
     /// This is called any time a message is received for the 'NodeType' passed to the `assign_handler()` method.
-    fn handle_msg(&mut self, msg: NodeMessage, runner: &NodeRunner) -> Option<Box<[NodeMessage]>>;
+    fn handle_msg(&mut self, msg: NodeMessage, runner: &NodeRunner) -> Option<Vec<NodeMessage>>;
 }
 
 
@@ -88,6 +88,23 @@ impl<'a> NodeRunner<'a> {
                 Body::Generate { msg_id: _ } => msg_type = NodeType::Generate,
                 Body::GenerateOk { msg_id: _, id: _, in_reply_to: _ } => {
                     eprintln!("received generate_ok: {:?}", next_msg);
+                    continue;
+                }
+                
+                // broadcast messages
+                Body::Topology { msg_id: _, topology: _ } => msg_type = NodeType::Broadcast,
+                Body::TopologyOk { msg_id: _, in_reply_to: _ } => {
+                    eprintln!("received topology_ok: {:?}", next_msg);
+                    continue;
+                }
+                Body::Broadcast { msg_id: _, message: _ } => msg_type = NodeType::Broadcast,
+                Body::BroadcastOk { msg_id: _, in_reply_to: _ } => {
+                    eprintln!("received broadcast_ok: {:?}", next_msg);
+                    continue;
+                }
+                Body::Read { msg_id: _ } => msg_type = NodeType::Broadcast,
+                Body::ReadOk { msg_id: _, in_reply_to: _, messages: _ } => {
+                    eprintln!("received read_ok: {:?}", next_msg);
                     continue;
                 }
             }

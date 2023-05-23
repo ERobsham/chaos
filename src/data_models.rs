@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, collections::HashMap};
 
 use serde::{Serialize, Deserialize};
 
@@ -39,6 +39,35 @@ pub enum Body {
          in_reply_to: MsgId,
          id: String,
       },
+
+     // Broadcast Workload :
+     // - Topology / TopologyOk
+     // - Broadcast / BroadcastOk
+     // - Read / ReadOk
+     Topology { 
+         msg_id: MsgId,
+         topology: HashMap<NodeId, Vec<NodeId>>,
+     },
+     TopologyOk {
+         msg_id: MsgId,
+         in_reply_to: MsgId,
+      },
+     Broadcast { 
+         msg_id: MsgId, 
+         message: usize,
+     },
+     BroadcastOk {
+         msg_id: MsgId,
+         in_reply_to: MsgId,
+      },
+     Read { 
+         msg_id: MsgId,
+     },
+     ReadOk {
+         msg_id: MsgId,
+         in_reply_to: MsgId,
+         messages: Vec<usize>,
+      },
      // ... TODO: fill in the rest of the types.
 }
 
@@ -46,6 +75,7 @@ pub enum Body {
 pub enum NodeType {
     Echo,
     Generate,
+    Broadcast,
     // ... TODO: fill in the rest of the types.
 }
 
@@ -54,6 +84,8 @@ impl Display for NodeType {
         match self {
             NodeType::Echo => write!(f, "echo"),
             NodeType::Generate => write!(f, "generate"),
+            NodeType::Broadcast => write!(f, "broadcast"),
+
             // ... TODO: fill in the rest of the types.
         }
     }

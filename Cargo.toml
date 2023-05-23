@@ -13,6 +13,10 @@ path = "examples/echo.rs"
 name = "unique-ids"
 path = "examples/unique-ids.rs"
 
+[[example]]
+name = "broadcast"
+path = "examples/broadcast.rs"
+
 
 [dependencies]
 anyhow = "1.0"

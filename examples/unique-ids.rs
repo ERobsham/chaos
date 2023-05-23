@@ -9,12 +9,12 @@ pub fn main() -> Result<()>{
     // setup the initialized `NodeRunner`
     let mut node = NodeRunner::new();
     
-    eprintln!("broadcasting...");
+    eprintln!("generating unique ids...");
     let mut handler = GeneratorNode::default();
     node.assign_handler(&mut handler, &[ NodeType::Generate ]);
 
     node.run_node()?;
-    eprintln!("completed broadcasting");
+    eprintln!("completed generating unique ids");
 
     Ok(())
 }
@@ -39,16 +39,16 @@ impl NodeHandler for GeneratorNode {
         self.node_id = node_id;
     }
 
-    fn handle_msg(&mut self, msg: NodeMessage, runner: &NodeRunner) -> Option<Box<[NodeMessage]>> {
+    fn handle_msg(&mut self, msg: NodeMessage, runner: &NodeRunner) -> Option<Vec<NodeMessage>> {
         if let Body::Generate { msg_id } = msg.body {
             let resp_msg_id = runner.get_next_msg_id();
             let unique_id = self.generate_id(&msg.src);
-            Some(Box::new([NodeMessage {
+            Some(vec![NodeMessage {
                 id:0,
                 src: self.node_id.clone(),
                 dest: msg.src,
                 body: Body::GenerateOk { msg_id: resp_msg_id, id: unique_id, in_reply_to: msg_id }
-            }]))
+            }])
         } else {
             None
         }

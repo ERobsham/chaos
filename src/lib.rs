@@ -5,7 +5,8 @@ mod init;
 use anyhow::{Result, anyhow};
 use init::InitBody;
 use io::{StdinSource, StdoutSink};
-use std::{io::Write, collections::HashMap, cell::{RefCell, Cell}, rc::Rc, ops::Add, time::{Duration, Instant}};
+use tokio::{time, select, sync::mpsc};
+use std::{collections::HashMap, cell::{RefCell, Cell}, rc::Rc, time::{Duration, Instant}};
 
 use crate::data_models::*;
 
@@ -22,7 +23,9 @@ pub trait NodeHandler {
     /// This is called anytime a registered interval is triggered.  
     ///   -- `tag` is the tag associated with the interval when the interval was registered.
     ///   -- `elapsed` is the duration elapsed since the `NodeRunner` started `run_node()`
-    fn handle_interval(&mut self, tag: Tag, elapsed: Duration, runner: &NodeRunner);
+    fn handle_interval(&mut self, _tag: Tag, _elapsed: Duration, _runner: &NodeRunner) {
+
+    }
 }
 
 
@@ -67,8 +70,8 @@ impl<'a> NodeRunner<'a> {
     /// this should be called after `new()` and before `run_node()`.
     /// 
     /// This sets up a mapping to message type -> handlers.
-    pub fn register_handler<T: NodeHandler>(&mut self, handler: &'a mut T, for_types: &[NodeType]) {
-        if self.running { return; }
+    pub fn register_handler<T: NodeHandler>(&mut self, handler: &'a mut T, for_types: &[NodeType]) -> bool {
+        if self.running { return false; }
         
         handler.init(self.node_id.clone(), self.node_ids.clone());
 
@@ -76,10 +79,14 @@ impl<'a> NodeRunner<'a> {
         for node_type in for_types {
             self.handlers.insert(node_type.to_string(), handler_ref.clone());
         }
+        true
     }
 
-    pub fn register_interval(&mut self, tag: Tag, interval: Duration) {
+    pub fn register_interval(&mut self, tag: Tag, interval: Duration) -> bool {
+        if self.running { return false; }
+
         self.intervals.insert(tag, interval);
+        true
     }
 
     /// runs the 'main loop' where stdin is read line-by-line and passed to the 'handler' set via the `assign_handler()` method
@@ -88,66 +95,61 @@ impl<'a> NodeRunner<'a> {
         self.start_time = Some(Instant::now());
 
         if self.handlers.len() == 0 { return Err(anyhow!("no handlers registered")); }
+    
+        // setup any 'intervals'
+        let (int_tx, mut int_rx) = mpsc::channel(10);
+        self.intervals
+            .iter()
+            .for_each(|(t, d)| { 
+                let tx = int_tx.clone();
+                let tag = t.clone();
+                let dur = d.clone();
+                tokio::task::spawn(async move { 
+                    let mut interval = time::interval(dur);
+                    let fut_tag = tag;
 
-        let mut input = std::io::stdin().lines();
-        let mut output = std::io::stdout().lock();
+                    interval.tick().await;
+                    loop {
+                        let loop_tag = fut_tag.clone();
+                        interval.tick().await;
+                        let _ = tx.send(loop_tag).await;
+                    }
+                });
+            });
+        
+        let (sig_tx, mut sig_rx) = mpsc::channel(10);
+        ctrlc::set_handler(move || {
+            let _ = sig_tx.blocking_send(());
+        }).expect("should set SIGINT handler");
 
-        // now get on to the run loop:
-        while let Some(Ok(next_line)) = input.next() {
-            let next_msg = serde_json::from_str::<NodeMessage>(next_line.as_str()).expect("unable to deserialize msg");
 
-            eprintln!("received msg:  {:?}", next_msg);
-
-            let msg_type: NodeType;
-            match &next_msg.body {
-                // echo messages
-                Body::Echo { msg_id: _, echo: _ } => msg_type = NodeType::Echo,
-                Body::EchoOk { msg_id: _, in_reply_to: _, echo: _ } => {
-                    eprintln!("received echo_ok: {:?}", next_msg);
-                    continue;
+        loop {
+            select! {
+                msg = self.msg_source.next_msg() => {
+                    eprintln!("received msg:  {:?}", msg);
+                    if let Some(msg_type) = msg.as_node_type() {
+                        let key: Workload = msg_type.to_string();
+                        if let Some(handler_rc) = self.handlers.get(&key) {
+                            let mut handler = handler_rc.borrow_mut();
+                            handler.handle_msg(msg, self);
+                        } else {
+                            eprintln!("no handler for workload: {}", key);
+                        }
+                    }
                 },
-
-                // generate messages
-                Body::Generate { msg_id: _ } => msg_type = NodeType::Generate,
-                Body::GenerateOk { msg_id: _, id: _, in_reply_to: _ } => {
-                    eprintln!("received generate_ok: {:?}", next_msg);
-                    continue;
-                }
-                
-                // broadcast messages
-                Body::Topology { msg_id: _, topology: _ } => msg_type = NodeType::Broadcast,
-                Body::TopologyOk { msg_id: _, in_reply_to: _ } => {
-                    eprintln!("received topology_ok: {:?}", next_msg);
-                    continue;
-                }
-                Body::Broadcast { msg_id: _, message: _ } => msg_type = NodeType::Broadcast,
-                Body::BroadcastOk { msg_id: _, in_reply_to: _ } => {
-                    eprintln!("received broadcast_ok: {:?}", next_msg);
-                    continue;
-                }
-                Body::Read { msg_id: _ } => msg_type = NodeType::Broadcast,
-                Body::ReadOk { msg_id: _, in_reply_to: _, messages: _ } => msg_type = NodeType::Broadcast,
-            }
-
-            let key: Workload = msg_type.to_string();
-            if let Some(handler_rc) = self.handlers.get(&key) {
-                let mut handler = handler_rc.borrow_mut();
-                
-                let responses = handler.handle_msg(next_msg, self);
-                if responses.is_none() {
-                    eprintln!("no response for current message");
-                    continue;
-                }
-
-                for resp in responses.unwrap().iter() {
-                    eprintln!("sending msg: {:?}", resp);
-                    let reply = serde_json::to_string(&resp).expect("couldnt serialize response");
-                    output.write_all(reply.add("\n").as_bytes())?;
-                    output.flush()?;
-                }
-
-            } else {
-                eprintln!("no handler for workload: {}", key);
+                tag = int_rx.recv() => {
+                    if let Some(tag) = tag {
+                        self.handlers.iter()
+                            .for_each(|(_, handler_rc)| {
+                                let mut handler = handler_rc.borrow_mut();
+                                let start_time = self.start_time.unwrap();
+                                handler.handle_interval(tag.clone(), start_time.elapsed(), &self);
+                            });
+                    }
+                },
+                _ = sig_rx.recv() => {
+                    break
+                },
             }
         }
 
@@ -160,7 +162,7 @@ impl<'a> NodeRunner<'a> {
     /// assigns the message the next available `msg_id`
     /// then handles sending it
     pub async fn send_msg(&self, mut msg: NodeMessage) {
-        msg.body.set_msg_id(0);
+        msg.body.set_msg_id(self.get_next_msg_id());
         self.msg_sink.send_msg(msg).await;
     }
 
@@ -171,8 +173,6 @@ impl<'a> NodeRunner<'a> {
 
         next_id
     }
-
-
     
 }
 

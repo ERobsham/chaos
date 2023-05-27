@@ -51,6 +51,4 @@ impl NodeHandler for GeneratorNode {
             None
         }
     }
-
-    fn handle_interval(&mut self, _tag: String, _elapsed: std::time::Duration, _runner: &NodeRunner) { }
 }

@@ -11,6 +11,29 @@ pub struct NodeMessage {
     pub body: Body,
 }
 
+impl NodeMessage {
+    pub(crate) fn as_node_type(&self) -> Option<NodeType> {
+        let msg_type: NodeType;
+        match &self.body {
+            // echo messages
+            Body::Echo { msg_id: _, echo: _ } => msg_type = NodeType::Echo,
+
+            // generate messages
+            Body::Generate { msg_id: _ } => msg_type = NodeType::Generate,
+            
+            // broadcast messages
+            Body::Topology { msg_id: _, topology: _ } => msg_type = NodeType::Broadcast,
+            Body::Broadcast { msg_id: _, message: _ } => msg_type = NodeType::Broadcast,
+            Body::Read { msg_id: _ } => msg_type = NodeType::Broadcast,
+            Body::ReadOk { msg_id: _, in_reply_to: _, messages: _ } => msg_type = NodeType::Broadcast,
+
+            _ => return None,
+        }
+        
+        Some(msg_type)
+    }
+}
+
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Body {

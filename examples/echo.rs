@@ -40,6 +40,4 @@ impl NodeHandler for EchoNode {
             None
         }
     }
-
-    fn handle_interval(&mut self, _tag: String, _elapsed: std::time::Duration, _runner: &NodeRunner) { }
 }

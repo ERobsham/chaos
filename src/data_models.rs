@@ -1,4 +1,4 @@
-use std::{fmt::Display, collections::HashMap};
+use std::{fmt::Display, collections::{HashMap, HashSet}};
 
 use serde::{Serialize, Deserialize};
 
@@ -66,7 +66,7 @@ pub enum Body {
      ReadOk {
          msg_id: MsgId,
          in_reply_to: MsgId,
-         messages: Vec<usize>,
+         messages: HashSet<usize>,
       },
      // ... TODO: fill in the rest of the types.
 }

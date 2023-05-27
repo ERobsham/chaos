@@ -103,10 +103,7 @@ impl<'a> NodeRunner<'a> {
                     continue;
                 }
                 Body::Read { msg_id: _ } => msg_type = NodeType::Broadcast,
-                Body::ReadOk { msg_id: _, in_reply_to: _, messages: _ } => {
-                    eprintln!("received read_ok: {:?}", next_msg);
-                    continue;
-                }
+                Body::ReadOk { msg_id: _, in_reply_to: _, messages: _ } => msg_type = NodeType::Broadcast,
             }
 
             let key = msg_type.to_string();

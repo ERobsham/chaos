@@ -3,17 +3,16 @@ use std::collections::HashMap;
 use anyhow::Result;
 use chaos::{NodeRunner, NodeHandler, data_models::*};
 
-
-pub fn main() -> Result<()>{
-
-    // setup the initialized `NodeRunner`
+#[tokio::main]
+pub async fn main() -> Result<()>{
     let mut node = NodeRunner::new();
     
     eprintln!("generating unique ids...");
+
     let mut handler = GeneratorNode::default();
     node.register_handler(&mut handler, &[ NodeType::Generate ]);
-
-    node.run_node()?;
+    node.run_node().await?;
+    
     eprintln!("completed generating unique ids");
 
     Ok(())
@@ -44,7 +43,6 @@ impl NodeHandler for GeneratorNode {
             let resp_msg_id = runner.get_next_msg_id();
             let unique_id = self.generate_id(&msg.src);
             Some(vec![NodeMessage {
-                id:0,
                 src: self.node_id.clone(),
                 dest: msg.src,
                 body: Body::GenerateOk { msg_id: resp_msg_id, id: unique_id, in_reply_to: msg_id }

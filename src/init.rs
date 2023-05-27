@@ -37,7 +37,7 @@ pub(crate) enum InitBody {
 
 /// Handles the common 'init' workload via stdin/stdout.
 /// Returns the `node_id`
-pub(crate) fn handle_init() -> String {
+pub(crate) fn handle_init() -> InitBody {
 
     let mut input = std::io::stdin().lines();
     let line = input.next()
@@ -51,13 +51,13 @@ pub(crate) fn handle_init() -> String {
 
     let response: InitMessage;
     let id: String;
-    match msg.body {
+    match &msg.body {
         InitBody::Init { msg_id, node_id, node_ids: _ } => {
-            id = node_id;
+            id = node_id.clone();
             response = InitMessage {
                 src:    id.clone(),
                 dest:   msg.src.clone(),
-                body:   InitBody::InitOk { in_reply_to: msg_id },
+                body:   InitBody::InitOk { in_reply_to: msg_id.clone() },
             }
         },
         InitBody::InitOk { in_reply_to: _ } => unreachable!("should not be receiving init_ok msg as a node"),
@@ -76,5 +76,5 @@ pub(crate) fn handle_init() -> String {
         .expect("stdout should flush data");
     drop(output);
 
-    id
+    msg.body
 }

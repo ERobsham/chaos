@@ -4,20 +4,21 @@ use rand::seq::SliceRandom;
 use std::collections::{HashSet, HashMap};
 use chaos::{NodeRunner, NodeHandler, data_models::*};
 
+use tokio;
 
-pub fn main() -> Result<()>{
 
-    // setup the initialized `NodeRunner`
+#[tokio::main]
+pub async fn main() -> Result<()>{
     let mut node = NodeRunner::new();
     
     eprintln!("broadcasting...");
+    
     let mut handler = BroadcastNode::default();
-
     node.register_handler(&mut handler, &[ NodeType::Broadcast ]);
-    node.run_node()?;
+    node.run_node().await?;
 
     eprintln!("completed broadcasting");
-
+    
     Ok(())
 }
 
@@ -61,7 +62,6 @@ impl NodeHandler for BroadcastNode {
             
             let resp_msg_id = runner.get_next_msg_id();
             Some(vec![NodeMessage {
-                id:0,
                 src: self.node_id.clone(),
                 dest: msg.src,
                 body: Body::TopologyOk { 
@@ -74,8 +74,7 @@ impl NodeHandler for BroadcastNode {
 
             // first, create the 'ok' response:
             let mut messages = vec![ 
-                NodeMessage { 
-                    id: 0, 
+                NodeMessage {
                     src: self.node_id.clone(), 
                     dest: msg.src.clone(),
                     body: Body::BroadcastOk { 
@@ -90,7 +89,6 @@ impl NodeHandler for BroadcastNode {
                 self.neighbors.iter()
                 .map(|dest| {
                     NodeMessage {
-                        id:0,
                         src: self.node_id.clone(),
                         dest: dest.clone(),
                         body: Body::Broadcast {
@@ -133,7 +131,6 @@ impl NodeHandler for BroadcastNode {
 
             // Finally, construct the response
             Some(vec![NodeMessage {
-                id:0,
                 src: self.node_id.clone(),
                 dest: msg.src,
                 body: Body::ReadOk { 
@@ -180,8 +177,7 @@ mod broadcast_tests {
         node.neighbors.push("c2".to_string());
 
         let msgs = node.handle_msg(
-            NodeMessage { 
-                id: 0, 
+            NodeMessage {
                 src: "c1".to_string(), 
                 dest: "n1".to_string(), 
                 body: Body::Broadcast { msg_id: 0, message: 1 },
@@ -219,8 +215,7 @@ mod broadcast_tests {
         node.neighbors_known_msgs.insert("c1".to_string(), known_set);
 
         let msg = node.handle_msg(
-            NodeMessage { 
-                id: 0, 
+            NodeMessage {
                 src: "c1".to_string(), 
                 dest: "n1".to_string(), 
                 body: Body::Read { msg_id: 0 },

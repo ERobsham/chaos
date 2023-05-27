@@ -6,10 +6,6 @@ pub type NodeId = String;
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct NodeMessage {
-    // meta data maelstrom must use?  might be helpful to see in some responses.
-    #[serde(skip_serializing, default)]
-    pub id: usize,
-
     pub src: NodeId,
     pub dest: NodeId,
     pub body: Body,
@@ -68,6 +64,34 @@ pub enum Body {
          messages: HashSet<usize>,
       },
      // ... TODO: fill in the rest of the types.
+}
+
+
+impl Body {
+    pub fn set_msg_id(&mut self, new_id: MsgId) {
+        match self {
+            Body::Echo { msg_id, echo: _ } => 
+                *msg_id = new_id,
+            Body::EchoOk { msg_id, in_reply_to: _, echo: _ } => 
+                *msg_id = new_id,
+            Body::Generate { msg_id } => 
+                *msg_id = new_id,
+            Body::GenerateOk { msg_id, in_reply_to: _, id: _ } => 
+                *msg_id = new_id,
+            Body::Topology { msg_id, topology: _ } => 
+                *msg_id = new_id,
+            Body::TopologyOk { msg_id, in_reply_to: _ } => 
+                *msg_id = new_id,
+            Body::Broadcast { msg_id, message: _ } => 
+                *msg_id = new_id,
+            Body::BroadcastOk { msg_id, in_reply_to: _ } => 
+                *msg_id = new_id,
+            Body::Read { msg_id } => 
+                *msg_id = new_id,
+            Body::ReadOk { msg_id, in_reply_to: _, messages: _ } => 
+                *msg_id = new_id,
+        }
+    }
 }
 
 

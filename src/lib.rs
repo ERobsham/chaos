@@ -3,6 +3,8 @@ pub mod io;
 mod init;
 
 use anyhow::{Result, anyhow};
+use init::InitBody;
+use io::{StdinSource, StdoutSink};
 use std::{io::Write, collections::HashMap, cell::{RefCell, Cell}, rc::Rc, ops::Add, time::{Duration, Instant}};
 
 use crate::data_models::*;
@@ -27,7 +29,7 @@ pub trait NodeHandler {
 #[derive(Default)]
 pub struct NodeRunner<'a> {
     
-    /// NodeId of this process's node.
+    /// NodeId of this process
     node_id: NodeId,
     
     /// NodeId's of all the nodes in our 'network'
@@ -38,8 +40,12 @@ pub struct NodeRunner<'a> {
     
     running: bool,
     start_time: Option<Instant>,
+
     handlers: HashMap<Workload, Rc<RefCell<&'a mut dyn NodeHandler>>>,
     intervals: HashMap<Tag, Duration>,
+
+    msg_source: StdinSource,
+    msg_sink: StdoutSink,
 }
 
 impl<'a> NodeRunner<'a> {
@@ -48,12 +54,14 @@ impl<'a> NodeRunner<'a> {
     /// 
     /// (ie automatically handles the one-time 'init' message)
     pub fn new() -> Self {
-        let mut runner: NodeRunner = Default::default();
-
-        // handle init
-        runner.node_id = init::handle_init();
-
-        runner
+        if let InitBody::Init { msg_id: _, node_id, node_ids } = init::handle_init() {
+            return NodeRunner {
+                node_id,
+                node_ids,
+                ..Default::default()
+            }
+        }
+        unreachable!("we must receive an Init variant");
     }
 
     /// this should be called after `new()` and before `run_node()`.
@@ -75,7 +83,7 @@ impl<'a> NodeRunner<'a> {
     }
 
     /// runs the 'main loop' where stdin is read line-by-line and passed to the 'handler' set via the `assign_handler()` method
-    pub fn run_node(&mut self) -> Result<()> {
+    pub async fn run_node(&mut self) -> Result<()> {
         self.running = true;
         self.start_time = Some(Instant::now());
 
@@ -148,6 +156,13 @@ impl<'a> NodeRunner<'a> {
         Ok(())
     }
 
+
+    /// assigns the message the next available `msg_id`
+    /// then handles sending it
+    pub async fn send_msg(&self, mut msg: NodeMessage) {
+        msg.body.set_msg_id(0);
+        self.msg_sink.send_msg(msg).await;
+    }
 
     /// NodeHandlers should use this to generate unique msg_ids for all their outgoing messages.
     pub fn get_next_msg_id(&self) -> MsgId {

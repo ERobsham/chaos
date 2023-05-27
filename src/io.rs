@@ -1,6 +1,6 @@
 use crate::data_models::NodeMessage;
 
-use std::{io::{self, Write}, thread};
+use std::{io::{self, Write}, thread::{self, JoinHandle}};
 use tokio::sync::{oneshot, mpsc};
 
 
@@ -31,6 +31,9 @@ impl StdinSource {
     }
 }
 
+impl Default for StdinSource {
+    fn default() -> Self { Self::new() }
+}
 
 
 
@@ -38,6 +41,7 @@ impl StdinSource {
 pub(crate) struct StdoutSink {
     msg_tx: mpsc::Sender<NodeMessage>,
     cancel_tx: Option<oneshot::Sender<()>>,
+    writer_handle: Option<JoinHandle<()>>,
 }
 
 impl StdoutSink {
@@ -46,7 +50,7 @@ impl StdoutSink {
         let (cancel_tx, mut cancel_rx) = oneshot::channel();
 
 
-        thread::spawn(move || {
+        let handle =thread::spawn(move || {
             let mut output = io::stdout().lock();
             
             loop {
@@ -60,10 +64,14 @@ impl StdoutSink {
                         let data = serde_json::to_string(&msg).expect("message should serialize");
                         output.write_all(data.as_bytes()).expect("stdout should accept data");
                         output.flush().expect("stdout should flush");
+                        continue;
                     },
                     Err(mpsc::error::TryRecvError::Empty) => (),
                     Err(mpsc::error::TryRecvError::Disconnected) => break,
                 }
+                
+                // lets not spin at 100% cpu on this thread...  maybe
+                thread::sleep(std::time::Duration::from_millis(1));
             }
 
             cancel_rx.close();
@@ -78,18 +86,29 @@ impl StdoutSink {
         Self {
             msg_tx,
             cancel_tx: Some(cancel_tx),
+            writer_handle: Some(handle),
         }
     }
 
-    pub async fn send_msg(&mut self, msg: NodeMessage) {
-        self.msg_tx.send(msg).await.expect("should send NodeMessage via channel")
+    pub async fn send_msg(&self, msg: NodeMessage) {
+        self.msg_tx.send(msg).await
+            .expect("should send NodeMessage via channel")
     }
+
+}
+
+impl Default for StdoutSink {
+    fn default() -> Self { Self::new() }
 }
 
 impl Drop for StdoutSink {
     fn drop(&mut self) {
         if let Some(tx) = self.cancel_tx.take() {
             let _ = tx.send(());
+        }
+
+        if let Some(handle) = self.writer_handle.take() {
+            let _ = handle.join();
         }
     }
 }

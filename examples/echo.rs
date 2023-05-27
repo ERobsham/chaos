@@ -1,17 +1,16 @@
 use anyhow::Result;
 use chaos::{NodeRunner, NodeHandler, data_models::*};
 
-
-pub fn main() -> Result<()>{
-
-    // setup the initialized `NodeRunner`
+#[tokio::main]
+pub async fn main() -> Result<()>{
     let mut node = NodeRunner::new();
     
     eprintln!("echoing...");
+
     let mut handler = EchoNode::default();
     node.register_handler(&mut handler, &[ NodeType::Echo ]);
+    node.run_node().await?;
 
-    node.run_node()?;
     eprintln!("completed echo");
 
     Ok(())
@@ -32,7 +31,6 @@ impl NodeHandler for EchoNode {
             let resp_msg_id = runner.get_next_msg_id();    
             Some(vec![
                 NodeMessage {
-                    id:0,
                     src: self.node_id.clone(),
                     dest: msg.src,
                     body: Body::EchoOk { msg_id: resp_msg_id, in_reply_to: msg_id, echo: echo }

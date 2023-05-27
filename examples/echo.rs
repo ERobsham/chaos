@@ -9,7 +9,7 @@ pub fn main() -> Result<()>{
     
     eprintln!("echoing...");
     let mut handler = EchoNode::default();
-    node.assign_handler(&mut handler, &[ NodeType::Echo ]);
+    node.register_handler(&mut handler, &[ NodeType::Echo ]);
 
     node.run_node()?;
     eprintln!("completed echo");
@@ -42,4 +42,6 @@ impl NodeHandler for EchoNode {
             None
         }
     }
+
+    fn handle_interval(&mut self, _tag: String, _elapsed: std::time::Duration, _runner: &NodeRunner) { }
 }

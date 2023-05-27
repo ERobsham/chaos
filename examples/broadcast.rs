@@ -1,6 +1,6 @@
 
 use anyhow::Result;
-use rand::Rng;
+use rand::seq::SliceRandom;
 use std::collections::{HashSet, HashMap};
 use chaos::{NodeRunner, NodeHandler, data_models::*};
 
@@ -12,9 +12,10 @@ pub fn main() -> Result<()>{
     
     eprintln!("broadcasting...");
     let mut handler = BroadcastNode::default();
-    node.assign_handler(&mut handler, &[ NodeType::Broadcast ]);
 
+    node.register_handler(&mut handler, &[ NodeType::Broadcast ]);
     node.run_node()?;
+
     eprintln!("completed broadcasting");
 
     Ok(())
@@ -94,7 +95,7 @@ impl NodeHandler for BroadcastNode {
                         dest: dest.clone(),
                         body: Body::Broadcast {
                             msg_id:runner.get_next_msg_id(), 
-                            message,
+                            message: message.clone(),
                         },
                     }
                 })
@@ -124,10 +125,7 @@ impl NodeHandler for BroadcastNode {
             window_size = window_size.min(list.len());
 
             let mut rng = rand::thread_rng();
-            let extras = (0..=window_size).filter_map(|_| {
-                let idx: usize = rng.gen();
-                list.get(idx)
-            }).cloned();
+            let extras = list.choose_multiple(&mut rng, window_size).cloned();
 
             src_unknown.extend(extras);
             
@@ -162,12 +160,52 @@ impl NodeHandler for BroadcastNode {
         _ => None,
         }
     }
+
+    fn handle_interval(&mut self, _tag: String, _elapsed: std::time::Duration, _runner: &NodeRunner) {
+
+    }
 }
 
 
 #[cfg(test)]
-mod BroadcastTests {
+mod broadcast_tests {
     use super::*;
+
+    #[test]
+    fn sends_broadcast() {
+        let mut node = BroadcastNode::default();
+
+        node.node_id = "n1".to_string();
+        node.neighbors.push("c1".to_string());
+        node.neighbors.push("c2".to_string());
+
+        let msgs = node.handle_msg(
+            NodeMessage { 
+                id: 0, 
+                src: "c1".to_string(), 
+                dest: "n1".to_string(), 
+                body: Body::Broadcast { msg_id: 0, message: 1 },
+            }, 
+            &NodeRunner::default(),
+        );
+
+        match msgs {
+            Some(msgs) => {
+                match &msgs[0].body {
+                    Body::BroadcastOk { msg_id:_, in_reply_to } => {
+                        assert!(*in_reply_to == 0)
+                    },
+                    _ => assert!(false, "'broadcast' did not produce a 'broadcast_ok' message"),
+                }
+
+                eprintln!("messages:");
+                msgs.iter().for_each(|msg| {
+                    eprintln!("        {:?}", msg);
+                });
+            },
+            None => assert!(false, "no response from 'Broadcast'!"),
+        }
+    }
 
     #[test]
     fn read_message_adds_extras() {

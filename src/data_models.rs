@@ -1,5 +1,4 @@
 use std::{fmt::Display, collections::{HashMap, HashSet}};
-
 use serde::{Serialize, Deserialize};
 
 pub type MsgId = usize;
@@ -72,6 +71,8 @@ pub enum Body {
 }
 
 
+pub type Workload = String;
+
 pub enum NodeType {
     Echo,
     Generate,
@@ -89,37 +90,4 @@ impl Display for NodeType {
             // ... TODO: fill in the rest of the types.
         }
     }
-}
-
-
-//
-// Internal models for the 'init' message.
-//
-// this will hide these details from any specific 'node' implementation, 
-// as all nodes should utilize the 'NodeRunner'
-//
-
-#[derive(Deserialize, Serialize, Debug)]
-pub(crate) struct InitMessage {
-    // meta data maelstrom must use?  might be helpful to see in some responses.
-    #[allow(dead_code)]
-    #[serde(skip_serializing, default)]
-    pub(crate) id: usize,
-
-    pub(crate) src: NodeId,
-    pub(crate) dest: NodeId,
-    pub(crate) body: InitBody,
-}
-
-#[derive(Deserialize, Serialize, Debug)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub(crate) enum InitBody {
-    Init{
-        msg_id:   MsgId,
-        node_id:  NodeId,
-        node_ids: Vec<NodeId>,
-    },
-    InitOk{
-        in_reply_to:   MsgId,
-    },
 }

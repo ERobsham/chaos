@@ -1,6 +1,6 @@
 use crate::data_models::NodeMessage;
 
-use std::{io::{self, Write}, thread::{self, JoinHandle}};
+use std::{io::{self, Write}, thread::{self, JoinHandle}, ops::Add};
 use tokio::sync::{oneshot, mpsc};
 
 
@@ -9,8 +9,9 @@ pub(crate) struct StdinSource {
 }
 
 impl StdinSource {
-    pub fn new() -> Self {        
-        let (tx, rx) = mpsc::channel(100);
+    pub fn new() -> Self {
+        #[allow(unused_mut)]
+        let (tx, mut rx) = mpsc::channel(100);
 
         thread::spawn(move || {
             let mut input = io::stdin().lines();
@@ -67,10 +68,11 @@ impl StdoutSink {
                 match msg_rx.try_recv() {
                     Ok(msg) => {
                         eprintln!("sending: {:?}", msg);
-                        let data = serde_json::to_string(&msg).expect("message should serialize");
+                        let mut data = serde_json::to_string(&msg).expect("message should serialize");
+                        data = data.add("\n");
                         output.write_all(data.as_bytes()).expect("stdout should accept data");
                         output.flush().expect("stdout should flush");
-                        continue;
+                        continue
                     },
                     Err(mpsc::error::TryRecvError::Empty) => (),
                     Err(mpsc::error::TryRecvError::Disconnected) => break,

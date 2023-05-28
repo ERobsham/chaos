@@ -140,8 +140,8 @@ impl<'a> NodeRunner<'a> {
                         }
                     }
                 },
-                tag = int_rx.recv() => {
-                    if let Some(tag) = tag {
+                t = int_rx.recv() => {
+                    if let Some(tag) = t {
                         for (_, handler_rc) in &self.handlers  {
                             let mut handler = handler_rc.borrow_mut();
                             let start_time = self.start_time.unwrap();

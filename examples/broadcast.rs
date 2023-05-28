@@ -1,11 +1,13 @@
 
 use anyhow::Result;
 use rand::seq::SliceRandom;
-use std::collections::{HashSet, HashMap};
+use std::{collections::{HashSet, HashMap}, time::Duration};
 use chaos::{NodeRunner, NodeHandler, data_models::*};
 
 use tokio;
 
+const GOSSIP_READ: &str = "";
+const GOSSIP_INTERVAL: Duration = Duration::from_millis(100);
 
 #[tokio::main]
 pub async fn main() -> Result<()>{
@@ -14,7 +16,10 @@ pub async fn main() -> Result<()>{
     eprintln!("broadcasting...");
     
     let mut handler = BroadcastNode::default();
+    
     node.register_handler(&mut handler, &[ NodeType::Broadcast ]);
+    node.register_interval(GOSSIP_READ.to_string(), GOSSIP_INTERVAL);
+
     node.run_node().await?;
 
     eprintln!("completed broadcasting");
@@ -83,18 +88,23 @@ impl NodeHandler for BroadcastNode {
                 },
             ];
 
+            if self.known_msgs.contains(&message) {
+                return Some(messages);
+            }
+
             // then all the broadcast messages:
             messages.extend(
                 self.neighbors.iter()
-                .map(|dest| {
-                    NodeMessage {
+                .filter_map(|dest| {
+                    if msg.src.eq(dest) { return None; }
+                    Some(NodeMessage {
                         src: self.node_id.clone(),
                         dest: dest.clone(),
                         body: Body::Broadcast {
                             msg_id: 0, 
                             message: message.clone(),
                         },
-                    }
+                    })
                 })
             );
 
@@ -110,20 +120,20 @@ impl NodeHandler for BroadcastNode {
         Body::Read { msg_id } => {
 
             // start by getting all the values we know the src node doesn't know 
-            let src_known = self.neighbors_known_msgs.get(&msg.src).unwrap();
-            let mut src_unknown: HashSet<_> = self.known_msgs.difference(src_known).copied().collect();
+            // let src_known = self.neighbors_known_msgs.get(&msg.src).unwrap();
+            // let mut src_unknown: HashSet<_> = self.known_msgs.difference(src_known).copied().collect();
 
 
             // Now extend that list with an extra set of values, 
             // randomly selected from the list of all our known values. 
-            let list:Vec<_> = self.known_msgs.iter().copied().collect();
-            let mut window_size = MIN_WIDOWING_SIZE.max(list.len()/5);
-            window_size = window_size.min(list.len());
+            // let list:Vec<_> = self.known_msgs.iter().copied().collect();
+            // let mut window_size = MIN_WIDOWING_SIZE.max(list.len()/5);
+            // window_size = window_size.min(list.len());
 
-            let mut rng = rand::thread_rng();
-            let extras = list.choose_multiple(&mut rng, window_size).cloned();
+            // let mut rng = rand::thread_rng();
+            // let extras = list.choose_multiple(&mut rng, window_size).cloned();
 
-            src_unknown.extend(extras);
+            // src_unknown.extend(extras);
             
             // `src_unknown` is unchanged at this point, and `extras` is not exhausted...???
 
@@ -134,7 +144,7 @@ impl NodeHandler for BroadcastNode {
                 body: Body::ReadOk { 
                     msg_id: 0, 
                     in_reply_to: msg_id, 
-                    messages: src_unknown, 
+                    messages: self.known_msgs.clone(), 
                 },
             }])
         },
@@ -156,7 +166,9 @@ impl NodeHandler for BroadcastNode {
         }
     }
 
-    fn handle_interval(&mut self, _tag: String, _elapsed: std::time::Duration) -> Option<Vec<NodeMessage>> {
+    fn handle_interval(&mut self, tag: String, _elapsed: std::time::Duration) -> Option<Vec<NodeMessage>> {
+
+        eprintln!("interval fired for tag: {}", tag);
         None
     }
 }

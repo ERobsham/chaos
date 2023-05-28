@@ -10,15 +10,19 @@ pub(crate) struct StdinSource {
 
 impl StdinSource {
     pub fn new() -> Self {        
-        let (tx, rx) = mpsc::channel(10);
+        let (tx, rx) = mpsc::channel(100);
 
         thread::spawn(move || {
             let mut input = io::stdin().lines();
+            eprintln!("setting up StdinSource");
             while let Some(Ok(line)) = input.next() {
                 let next_msg = serde_json::from_str::<NodeMessage>(line.as_str()).expect("should deserialize to a NodeMessage");
+                eprintln!("received:  {:?}", next_msg);
 
                 let _ = tx.blocking_send(next_msg).expect("should send NodeMessage via channel");
             }
+
+            eprintln!("cleaning up StdinSource");
         });
 
         Self {
@@ -46,13 +50,14 @@ pub(crate) struct StdoutSink {
 
 impl StdoutSink {
     pub fn new() -> Self {        
-        let (msg_tx, mut msg_rx) = mpsc::channel(10);
+        let (msg_tx, mut msg_rx) = mpsc::channel(100);
         let (cancel_tx, mut cancel_rx) = oneshot::channel();
 
 
         let handle =thread::spawn(move || {
             let mut output = io::stdout().lock();
-            
+            eprintln!("setting up StdoutSink");
+
             loop {
                 match cancel_rx.try_recv() {
                     Err(oneshot::error::TryRecvError::Empty) => (),
@@ -61,6 +66,7 @@ impl StdoutSink {
                 
                 match msg_rx.try_recv() {
                     Ok(msg) => {
+                        eprintln!("sending: {:?}", msg);
                         let data = serde_json::to_string(&msg).expect("message should serialize");
                         output.write_all(data.as_bytes()).expect("stdout should accept data");
                         output.flush().expect("stdout should flush");
@@ -73,6 +79,8 @@ impl StdoutSink {
                 // lets not spin at 100% cpu on this thread...  maybe
                 thread::sleep(std::time::Duration::from_millis(1));
             }
+
+            eprintln!("cleaning up StdoutSink");
 
             cancel_rx.close();
             msg_rx.close();

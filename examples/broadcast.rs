@@ -46,7 +46,7 @@ impl NodeHandler for BroadcastNode {
         self.update_neighbors(node_ids);
     }
 
-    fn handle_msg(&mut self, msg: NodeMessage, runner: &NodeRunner) -> Option<Vec<NodeMessage>> {
+    fn handle_msg(&mut self, msg: NodeMessage) -> Option<Vec<NodeMessage>> {
         
         // ensure we always have a value for `msg.src` here
         // so we can indiscriminantly unwrap the .get(&msg.src) Option
@@ -60,12 +60,11 @@ impl NodeHandler for BroadcastNode {
                 self.update_neighbors(our_neighbors.clone());
             }
             
-            let resp_msg_id = runner.get_next_msg_id();
             Some(vec![NodeMessage {
                 src: self.node_id.clone(),
                 dest: msg.src,
                 body: Body::TopologyOk { 
-                    msg_id: resp_msg_id, 
+                    msg_id: 0, 
                     in_reply_to: msg_id 
                 },
             }])
@@ -78,7 +77,7 @@ impl NodeHandler for BroadcastNode {
                     src: self.node_id.clone(), 
                     dest: msg.src.clone(),
                     body: Body::BroadcastOk { 
-                        msg_id: runner.get_next_msg_id(), 
+                        msg_id: 0, 
                         in_reply_to: msg_id 
                     }, 
                 },
@@ -92,7 +91,7 @@ impl NodeHandler for BroadcastNode {
                         src: self.node_id.clone(),
                         dest: dest.clone(),
                         body: Body::Broadcast {
-                            msg_id:runner.get_next_msg_id(), 
+                            msg_id: 0, 
                             message: message.clone(),
                         },
                     }
@@ -109,7 +108,6 @@ impl NodeHandler for BroadcastNode {
             Some(messages) 
         },
         Body::Read { msg_id } => {
-            let resp_msg_id = runner.get_next_msg_id();
 
             // start by getting all the values we know the src node doesn't know 
             let src_known = self.neighbors_known_msgs.get(&msg.src).unwrap();
@@ -134,7 +132,7 @@ impl NodeHandler for BroadcastNode {
                 src: self.node_id.clone(),
                 dest: msg.src,
                 body: Body::ReadOk { 
-                    msg_id: resp_msg_id, 
+                    msg_id: 0, 
                     in_reply_to: msg_id, 
                     messages: src_unknown, 
                 },
@@ -158,8 +156,8 @@ impl NodeHandler for BroadcastNode {
         }
     }
 
-    fn handle_interval(&mut self, _tag: String, _elapsed: std::time::Duration, _runner: &NodeRunner) {
-
+    fn handle_interval(&mut self, _tag: String, _elapsed: std::time::Duration) -> Option<Vec<NodeMessage>> {
+        None
     }
 }
 
@@ -181,8 +179,7 @@ mod broadcast_tests {
                 src: "c1".to_string(), 
                 dest: "n1".to_string(), 
                 body: Body::Broadcast { msg_id: 0, message: 1 },
-            }, 
-            &NodeRunner::default(),
+            }
         );
 
         match msgs {
@@ -219,8 +216,7 @@ mod broadcast_tests {
                 src: "c1".to_string(), 
                 dest: "n1".to_string(), 
                 body: Body::Read { msg_id: 0 },
-            }, 
-            &NodeRunner::default(),
+            }
         );
 
         match msg {

@@ -26,14 +26,13 @@ impl NodeHandler for EchoNode {
         self.node_id = node_id;
     }
 
-    fn handle_msg(&mut self, msg: NodeMessage, runner: &NodeRunner) -> Option<Vec<NodeMessage>> {
+    fn handle_msg(&mut self, msg: NodeMessage) -> Option<Vec<NodeMessage>> {
         if let Body::Echo { msg_id, echo } = msg.body {
-            let resp_msg_id = runner.get_next_msg_id();    
             Some(vec![
                 NodeMessage {
                     src: self.node_id.clone(),
                     dest: msg.src,
-                    body: Body::EchoOk { msg_id: resp_msg_id, in_reply_to: msg_id, echo: echo }
+                    body: Body::EchoOk { msg_id: 0, in_reply_to: msg_id, echo: echo }
                 },
             ])
         } else {

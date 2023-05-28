@@ -38,14 +38,13 @@ impl NodeHandler for GeneratorNode {
         self.node_id = node_id;
     }
 
-    fn handle_msg(&mut self, msg: NodeMessage, runner: &NodeRunner) -> Option<Vec<NodeMessage>> {
+    fn handle_msg(&mut self, msg: NodeMessage) -> Option<Vec<NodeMessage>> {
         if let Body::Generate { msg_id } = msg.body {
-            let resp_msg_id = runner.get_next_msg_id();
             let unique_id = self.generate_id(&msg.src);
             Some(vec![NodeMessage {
                 src: self.node_id.clone(),
                 dest: msg.src,
-                body: Body::GenerateOk { msg_id: resp_msg_id, id: unique_id, in_reply_to: msg_id }
+                body: Body::GenerateOk { msg_id: 0, id: unique_id, in_reply_to: msg_id }
             }])
         } else {
             None

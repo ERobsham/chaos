@@ -18,13 +18,13 @@ pub trait NodeHandler {
     fn init(&mut self, node_id: NodeId, node_ids:Vec<NodeId>);
 
     /// This is called any time a message is received for the 'NodeType' passed to the `assign_handler()` method.
-    fn handle_msg(&mut self, msg: NodeMessage, runner: &NodeRunner) -> Option<Vec<NodeMessage>>;
+    fn handle_msg(&mut self, msg: NodeMessage) -> Option<Vec<NodeMessage>>;
 
     /// This is called anytime a registered interval is triggered.  
     ///   -- `tag` is the tag associated with the interval when the interval was registered.
     ///   -- `elapsed` is the duration elapsed since the `NodeRunner` started `run_node()`
-    fn handle_interval(&mut self, _tag: Tag, _elapsed: Duration, _runner: &NodeRunner) {
-
+    fn handle_interval(&mut self, _tag: Tag, _elapsed: Duration) -> Option<Vec<NodeMessage>> {
+        None
     }
 }
 
@@ -126,12 +126,15 @@ impl<'a> NodeRunner<'a> {
         loop {
             select! {
                 msg = self.msg_source.next_msg() => {
-                    eprintln!("received msg:  {:?}", msg);
+                    // eprintln!("run_node dispatching msg:  {:?}", msg
                     if let Some(msg_type) = msg.as_node_type() {
                         let key: Workload = msg_type.to_string();
                         if let Some(handler_rc) = self.handlers.get(&key) {
                             let mut handler = handler_rc.borrow_mut();
-                            handler.handle_msg(msg, self);
+                            
+                            if let Some(responses) = handler.handle_msg(msg) {
+                                self.send_msgs(responses).await;
+                            }
                         } else {
                             eprintln!("no handler for workload: {}", key);
                         }
@@ -139,12 +142,13 @@ impl<'a> NodeRunner<'a> {
                 },
                 tag = int_rx.recv() => {
                     if let Some(tag) = tag {
-                        self.handlers.iter()
-                            .for_each(|(_, handler_rc)| {
-                                let mut handler = handler_rc.borrow_mut();
-                                let start_time = self.start_time.unwrap();
-                                handler.handle_interval(tag.clone(), start_time.elapsed(), &self);
-                            });
+                        for (_, handler_rc) in &self.handlers  {
+                            let mut handler = handler_rc.borrow_mut();
+                            let start_time = self.start_time.unwrap();
+                            if let Some(msgs) = handler.handle_interval(tag.clone(), start_time.elapsed()) {
+                                self.send_msgs(msgs).await;
+                            }
+                        }
                     }
                 },
                 _ = sig_rx.recv() => {
@@ -161,13 +165,15 @@ impl<'a> NodeRunner<'a> {
 
     /// assigns the message the next available `msg_id`
     /// then handles sending it
-    pub async fn send_msg(&self, mut msg: NodeMessage) {
-        msg.body.set_msg_id(self.get_next_msg_id());
-        self.msg_sink.send_msg(msg).await;
+    async fn send_msgs(&self, msgs: Vec<NodeMessage>) {
+        for mut msg in msgs {
+            msg.body.set_msg_id(self.get_next_msg_id());
+            self.msg_sink.send_msg(msg).await;
+        }
     }
 
     /// NodeHandlers should use this to generate unique msg_ids for all their outgoing messages.
-    pub fn get_next_msg_id(&self) -> MsgId {
+    fn get_next_msg_id(&self) -> MsgId {
         let next_id = self.next_msg_id.get().wrapping_add(1);
         self.next_msg_id.set(next_id);
 

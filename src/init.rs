@@ -47,7 +47,7 @@ pub(crate) fn handle_init() -> InitBody {
 
     let msg = serde_json::from_str::<InitMessage>(line.as_str())
         .expect("line should be a valid init message");
-    eprintln!("received init: \n{:?}", line);
+    eprintln!("received init: \n{:?}", msg);
 
     let response: InitMessage;
     let id: String;
